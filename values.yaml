@@ -10,7 +10,7 @@ replicaCount: 1
 ##
 image:
   repository: apache/nifi
-  tag: "1.27.0"
+  tag: "1.28.1"
   pullPolicy: "IfNotPresent"
   ## Optionally specify an imagePullSecret.
   ## Secret must be manually created in the namespace.
@@ -49,6 +49,10 @@ sts:
     enabled: false
     failureThreshold: 60
     periodSeconds: 10
+  livenessProbe:
+    # Not used if startupProbe is enabled.
+    initialDelaySeconds: 90
+    periodSeconds: 60
 
 ## Useful if using any custom secrets
 ## Pass in some secrets to use (if required)
@@ -85,10 +89,21 @@ properties:
   # If sensitiveKey was already set, then pass in sensitiveKeyPrior with the old key.
   # sensitiveKeyPrior: OldPasswordToChangeFrom
   algorithm: NIFI_PBKDF2_AES_GCM_256
+  # You can use internalSecure to enable/disable internal exposure of NiFi on the HTTPS port. This
+  # is by default enabled (because NiFi config should be "Secure by Default") and also because
+  # it is required when any auth provider is enabled.
+  # If any auth provider is enabled, this property has no effect and it acts as if ALWAYS enabled.
+  # -
+  # Still, we leave the possibility to disable this which can be useful if NiFi is being installed inside a
+  # service mesh, such as Istio, that will put traffic in mTLS in a transparent way. In this case we want
+  # to be able to expose NiFi over http and leave security to external components. But notice that for this
+  # you also need to disable authentication.
+  internalSecure: true
   # use externalSecure for when inbound SSL is provided by nginx-ingress or other external mechanism
   externalSecure: false
   isNode: false
   httpsPort: 8443
+  httpPort: 8080 # This is the default. Used only if internalSecure=false and no auth provider is enabled.
   webProxyHost: [] # <clusterIP>:<NodePort> (If Nifi service is NodePort or LoadBalancer)
 #    - localhost:30001
 #    - localhost:30002
@@ -127,9 +142,21 @@ auth:
   SSL:
     keystorePasswd: changeMe
     truststorePasswd: changeMe
+    # Whether anonymous authentication is allowed when running over HTTPS without any other auth provider
+    # enabled. If this is false and no auth provider is enabled, then client certificates are required to connect
+    # via TLS. Notice that, even if this is true, the authorization provider used must permit anonymous access
+    # to the application (and it does not look like it is supported at the moment).
+    allowAnonymous: false
 
   # Automatically disabled if OIDC or LDAP enabled
   singleUser:
+    # This enables single-user-authorizer and is enabled by default, as from NiFi 1.14.0 default
+    # config should be "Secure by Default".
+    # -
+    # Still, we leave the possibility to disable this and to have NiFi without any authentication
+    # because users could protect NiFi using a transparent oauth2-proxy or similar solutions
+    # and in that case they might want to disable any internal authentication.
+    enabled: true
     username: username
     password: changemechangeme # Must have at least 12 characters
 
@@ -186,6 +213,7 @@ openldap:
 service:
   type: ClusterIP
   httpsPort: 8443
+  httpPort: 8080
   # nodePort: 30236
   annotations: { }
     # loadBalancerIP:
@@ -232,7 +260,7 @@ ingress:
 # Separate image for tailing each log separately and checking zookeeper connectivity
 sidecar:
   image: busybox
-  tag: "1.36.1"
+  tag: "1.37.0"
   imagePullPolicy: "IfNotPresent"
 
 ## Enable persistence using Persistent Volume Claims
@@ -430,7 +458,7 @@ registry:
   port: 80
   image:
     repository: apache/nifi-registry
-    tag: "1.27.0"
+    tag: "1.28.1"
     pullPolicy: "IfNotPresent"
   ## Add values for the nifi-registry here
   ## ref: https://github.com/dysnix/charts/blob/main/dysnix/nifi-registry/values.yaml

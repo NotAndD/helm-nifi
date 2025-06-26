@@ -90,3 +90,22 @@ Set the service account name
 {{- default "default" .Values.sts.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+{{/*
+Return (as a string) true or false depending if NiFi needs to expose in a secure way
+*/}}
+{{- define "apache-nifi.isInternalSecure" -}}
+{{- if .Values.auth.singleUser.enabled }}
+{{- printf "true" }}
+{{- else if .Values.auth.clientAuth.enabled }}
+{{- printf "true" }}
+{{- else if .Values.auth.ldap.enabled }}
+{{- printf "true" }}
+{{- else if .Values.auth.oidc.enabled }}
+{{- printf "true" }}
+{{- else if .Values.properties.internalSecure }}
+{{- printf "true" }}
+{{- else }}
+{{- printf "false" }}
+{{- end }}
+{{- end }}
