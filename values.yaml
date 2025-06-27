@@ -455,7 +455,7 @@ registry:
   ## If true, install the Nifi registry
   enabled: false
   url: ""
-  port: 80
+  port: 18080
   image:
     repository: apache/nifi-registry
     tag: "1.28.1"
