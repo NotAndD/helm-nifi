@@ -455,7 +455,12 @@ registry:
   ## If true, install the Nifi registry
   enabled: false
   url: ""
-  port: 18080
+  # This is used to compose the registry URL on NiFi side.
+  port: 80
+  service:
+    # Notice: this needs to match the port above in case registry.enabled: true
+    port: 80
+
   image:
     repository: apache/nifi-registry
     tag: "1.28.1"
