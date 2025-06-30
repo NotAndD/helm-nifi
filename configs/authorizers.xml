@@ -258,7 +258,7 @@
             so the values should be the unmapped identities (i.e. full DN from a certificate).
     -->
 
-{{- if not (and .Values.auth.ldap.enabled .Values.auth.oidc.enabled) }}
+{{- if and (not (and .Values.auth.ldap.enabled .Values.auth.oidc.enabled)) .Values.auth.singleUser.enabled }}
     <authorizer>
         <identifier>single-user-authorizer</identifier>
         <class>org.apache.nifi.authorization.single.user.SingleUserAuthorizer</class>

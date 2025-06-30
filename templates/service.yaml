@@ -13,8 +13,13 @@ metadata:
 spec:
   clusterIP: None
   ports:
+  {{- if eq (include "apache-nifi.isInternalSecure" .) "false" }}
+  - port: {{ .Values.properties.httpPort }}
+    name: http
+  {{- else }}
   - port: {{ .Values.properties.httpsPort }}
     name: https
+  {{- end }}
   - port: {{ .Values.properties.clusterPort }}
     name: cluster
   - port: {{ .Values.properties.siteToSite.port }}
@@ -57,10 +62,17 @@ spec:
   {{- end }}
   {{- end }}
   ports:
+  {{- if eq (include "apache-nifi.isInternalSecure" .) "false" }}
+    - port: {{ .Values.service.httpPort }}
+      name: http
+      targetPort: {{ .Values.properties.httpPort }}
+      nodePort: {{ .Values.service.nodePort }}
+  {{- else }}
     - port: {{ .Values.service.httpsPort }}
       name: https
       targetPort: {{ .Values.properties.httpsPort }}
       nodePort: {{ .Values.service.nodePort }}
+  {{- end }}
     - port: {{ .Values.properties.siteToSite.port }}
       name: site-to-site
       targetPort: {{ .Values.properties.siteToSite.port }}

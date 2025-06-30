@@ -2,7 +2,10 @@
 {{- if .Values.ingress.enabled -}}
 {{- $fullName := include "apache-nifi.fullname" $ -}}
 {{- $ingressPath := .Values.ingress.path -}}
-{{- $ingressHttpsPort := .Values.service.httpsPort -}}
+{{- $ingressPort := .Values.service.httpsPort -}}
+{{- if eq (include "apache-nifi.isInternalSecure" .) "false" }}
+  {{- $ingressPort = .Values.service.httpPort -}}
+{{- end }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -42,6 +45,6 @@ spec:
               service:
                 name: {{ $fullName }}
                 port: 
-                  number: {{ $ingressHttpsPort }}
+                  number: {{ $ingressPort }}
   {{- end }}
 {{- end }}
