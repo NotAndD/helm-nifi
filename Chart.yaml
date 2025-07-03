@@ -1,8 +1,8 @@
 ---
 apiVersion: v2
 name: nifi
-version: 1.3.3
-appVersion: 1.28.1
+version: 1.3.4
+appVersion: 2.4.0
 description: Apache NiFi is a software project from the Apache Software Foundation designed to automate the flow of data between software systems.
 keywords:
   - nifi

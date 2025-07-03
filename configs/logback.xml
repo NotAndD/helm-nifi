@@ -144,7 +144,6 @@
     <logger name="org.apache.nifi.processors.standard.LogAttribute" level="INFO"/>
     <logger name="org.apache.nifi.processors.standard.LogMessage" level="INFO"/>
     <logger name="org.apache.nifi.controller.repository.StandardProcessSession" level="WARN" />
-    <logger name="org.apache.parquet.hadoop.InternalParquetRecordReader" level="WARN" />
 
     <logger name="org.apache.zookeeper.ClientCnxn" level="ERROR" />
     <logger name="org.apache.zookeeper.server.NIOServerCnxn" level="ERROR" />
@@ -171,7 +170,6 @@
 
     <!-- Suppress non-error messages due to excessive logging by class or library -->
     <logger name="org.springframework" level="ERROR"/>
-    <logger name="org.springframework.security" level="INFO"/>
 
     <!-- Suppress non-error messages due to known warning about redundant path annotation (NIFI-574) -->
     <logger name="org.glassfish.jersey.internal.Errors" level="ERROR"/>
@@ -187,7 +185,7 @@
     <logger name="com.hierynomus.smbj" level="WARN" />
 
     <!-- Suppress non-error messages from AWS KCL which was emitting large amounts of INFO logs by default -->
-    <logger name="com.amazonaws.services.kinesis" level="WARN" />
+    <logger name="software.amazon.awssdk.kinesis" level="WARN" />
 
     <!-- Suppress non-error messages from Apache Atlas which was emitting large amounts of INFO logs by default -->
     <logger name="org.apache.atlas" level="WARN"/>
@@ -218,6 +216,9 @@
         <appender-ref ref="USER_FILE"/>
     </logger>
     <logger name="org.apache.nifi.web.api.AccessResource" level="INFO" additivity="false">
+        <appender-ref ref="USER_FILE"/>
+    </logger>
+    <logger name="org.springframework.security.saml.log" level="WARN" additivity="false">
         <appender-ref ref="USER_FILE"/>
     </logger>
     <logger name="org.opensaml" level="WARN" additivity="false">

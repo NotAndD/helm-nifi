@@ -33,7 +33,7 @@ persistence:
   accessModes:  [ReadWriteOnce]
 
   ## Storage Capacities for persistent volumes
-  # Storage capacity for the 'data' directory, which is used to hold things such as the flow.xml.gz, configuration, state, etc.
+  # Storage capacity for the 'data' directory, which is used to hold things such as the flow.json.gz, configuration, state, etc.
   caStorage:
     size: 1Gi
 

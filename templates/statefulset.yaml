@@ -156,10 +156,12 @@ spec:
 {{- end }}
 
 {{ if .Values.customFlow }}
-          gzip < {{ .Values.customFlow }} > /opt/nifi/data/flow.xml.gz
+          gzip < {{ .Values.customFlow }} > /opt/nifi/data/flow.json.gz
 {{ else }}
-          if ! test -f /opt/nifi/data/flow.xml.gz && test -f /opt/nifi/data/flow.xml; then
-            gzip /opt/nifi/data/flow.xml
+          if ! test -f /opt/nifi/data/flow.json.gz && test -f /opt/nifi/nifi-init/flow.json; then
+            gzip /opt/nifi/nifi-init/flow.json -c > /opt/nifi/data/flow.json.gz
+            echo "/opt/nifi/data/flow.json.gz have been initialized using the default flow.json file."
+            gzip -d -c /opt/nifi/data/flow.json.gz
           fi
 {{ end }}
 
@@ -220,18 +222,19 @@ spec:
   {{- end }}
 {{- end }}
 
-{{- if .Values.properties.sensitiveKeySetFile }}
-          if [ ! -r {{ .Values.properties.sensitiveKeySetFile | quote }} ]
-          then
-{{- if .Values.properties.sensitiveKeyPrior }}
+        {{- if .Values.properties.forceSensitiveKeyChange }}
+          {{- if .Values.properties.sensitiveKeyPrior }}
             prop_replace nifi.sensitive.props.key {{ .Values.properties.sensitiveKeyPrior | quote }}
-{{- /* if .Values.properties.sensitiveKeyPrior */}}{{ else }}
+          {{- else }}
             prop_replace nifi.sensitive.props.key ""
-{{- /* if .Values.properties.sensitiveKeyPrior */}}{{ end }}
+          {{- end }}
             bin/nifi.sh set-sensitive-properties-key {{ .Values.properties.sensitiveKey | quote }}
-            touch {{ .Values.properties.sensitiveKeySetFile | quote }}
-          fi
-{{- /* if .Values.properties.sensitiveKeySetFile */}}{{ end }}
+        {{- end }}
+
+        {{- if .Values.properties.forceAlgorithmChange }}
+            prop_replace nifi.sensitive.props.algorithm {{ .Values.properties.algorithmPrior | quote }}
+            bin/nifi.sh set-sensitive-properties-algorithm {{ .Values.properties.algorithm | quote }}
+        {{- end }}
 
           for f in "${NIFI_HOME}/conf/authorizers.xml" "${NIFI_HOME}/conf/login-identity-providers.xml" ${NIFI_HOME}/conf/nifi.properties
           do
@@ -325,11 +328,6 @@ spec:
         resources:
 {{ toYaml .Values.resources | indent 10 }}
         ports:
-{{- if .Values.metrics.prometheus.enabled }}
-        - containerPort: {{ .Values.metrics.prometheus.port }}
-          name: metrics
-          protocol: TCP
-{{- end }}
         - containerPort: {{ $containerPort }}
 {{- if .Values.sts.hostPort }}
           hostPort: {{ .Values.sts.hostPort }}
@@ -460,8 +458,8 @@ spec:
             mountPath: /opt/nifi/nifi-current/conf/logback.xml
             subPath: "logback.xml"
           - name: "flow-content"
-            mountPath: /opt/nifi/data/flow.xml
-            subPath: "flow.xml"
+            mountPath: /opt/nifi/nifi-init/flow.json
+            subPath: "flow.json"
           {{- range $secret := .Values.secrets }}
             {{- if $secret.mountPath }}
               {{- if $secret.keys }}
@@ -737,8 +735,8 @@ spec:
         configMap:
           name: {{ template "apache-nifi.fullname" . }}-config
           items:
-            - key: "flow.xml"
-              path: "flow.xml"
+            - key: "flow.json"
+              path: "flow.json"
 {{- if .Values.certManager.enabled }}
       - name: secret-reader-token
         secret:
