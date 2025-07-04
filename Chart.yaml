@@ -38,9 +38,6 @@ dependencies:
     version: 1.1.5
     repository: https://dysnix.github.io/charts/
     condition: registry.enabled
-  - name: ca
-    version: 1.0.1
-    condition: ca.enabled
   - name: openldap
     version: ~1.2.4
     repository: https://charts.helm.sh/stable

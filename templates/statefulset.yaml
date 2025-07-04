@@ -172,12 +172,15 @@ spec:
           prop_replace nifi.web.http.host ${FQDN}
 
 {{- if .Values.certManager.enabled }}
+          cp "${NIFI_HOME}/tls/cert-${ORDINAL_NUMBER}/keystore.jks" "${NIFI_HOME}/tls/keystore.jks"
+          cp "${NIFI_HOME}/tls/cert-${ORDINAL_NUMBER}/truststore.jks" "${NIFI_HOME}/tls/truststore.jks"
+
           prop_replace nifi.security.keystore "${NIFI_HOME}/tls/keystore.jks"
           prop_replace nifi.security.keystoreType JKS
-          prop_replace nifi.security.keystorePasswd "{{ .Values.certManager.keystorePasswd }}"
+          prop_replace nifi.security.keystorePasswd "${CERT_MANAGER_STORE_PASSWORD}"
           prop_replace nifi.security.truststore "${NIFI_HOME}/tls/truststore.jks"
           prop_replace nifi.security.truststoreType JKS
-          prop_replace nifi.security.truststorePasswd "{{ .Values.certManager.truststorePasswd }}"
+          prop_replace nifi.security.truststorePasswd "${CERT_MANAGER_STORE_PASSWORD}"
 
           prop_replace nifi.web.https.host "$(hostname).{{ template "apache-nifi.fullname" $ }}-headless.{{ $.Release.Namespace }}.svc.{{ $.Values.certManager.clusterDomain }}"
           prop_replace nifi.cluster.node.address "$(hostname).{{ template "apache-nifi.fullname" $ }}-headless.{{ $.Release.Namespace }}.svc.{{ $.Values.certManager.clusterDomain }}"
@@ -188,32 +191,6 @@ spec:
 
           prop_replace nifi.security.autoreload.enabled true
           prop_replace nifi.security.autoreload.interval "{{ .Values.certManager.refreshSeconds }} secs"
-
-          while [ ! -r "${NIFI_HOME}/tls/truststore.jks" ]
-          do
-            echo "${NIFI_HOME}/tls/truststore.jks" is not readable!  Waiting for cert-manager sidecar to populate it.
-            sleep 2
-          done
-
-          while [ ! -r "${NIFI_HOME}/tls/keystore.jks" ]
-          do
-            echo "${NIFI_HOME}/tls/keystore.jks" is not readable!  Waiting for cert-manager sidecar to populate it.
-            sleep 2
-          done
-
-{{- /* if .Values.certManager.enabled */}}{{ else if eq (include "apache-nifi.isInternalSecure" .) "true" }}
-
-          if [ ! -r "${NIFI_HOME}/conf/nifi-cert.pem" ]
-          then
-            /opt/nifi/nifi-toolkit-current/bin/tls-toolkit.sh standalone \
-              -n '{{.Release.Name}}-nifi-0.{{.Release.Name}}-nifi-headless.{{.Release.Namespace}}.svc.cluster.local' \
-              -C '{{.Values.auth.admin}}' \
-              -o "${NIFI_HOME}/conf/" \
-              -P {{.Values.auth.SSL.truststorePasswd}} \
-              -S {{.Values.auth.SSL.keystorePasswd}} \
-              --nifiPropertiesFile /opt/nifi/nifi-current/conf/nifi.properties
-          fi
-
 {{- /* if .Values.certManager.enabled */}}{{ end }}
 
 {{- if .Values.properties.safetyValve }}
@@ -341,6 +318,17 @@ spec:
 {{ toYaml .Values.containerPorts | indent 8 }}
 {{- end }}
         env:
+        {{- if .Values.certManager.enabled }}
+        - name: ORDINAL_NUMBER
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.labels['apps.kubernetes.io/pod-index']
+        - name: CERT_MANAGER_STORE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.certManager.jks.secretName }}
+              key: {{ .Values.certManager.jks.secretKey }}
+        {{- end }}
         - name: NIFI_ZOOKEEPER_CONNECT_STRING
           value: {{ template "zookeeper.url" . }}
 {{- if and (not (or (.Values.auth.ldap.enabled) (.Values.auth.oidc.enabled))) (eq (include "apache-nifi.isInternalSecure" .) "true") }}
@@ -492,11 +480,13 @@ spec:
               {{- end }}
             {{- end }}
           {{- end }}
-{{- if .Values.certManager.enabled }}
-          - name: "tls"
-            mountPath: /opt/nifi/nifi-current/tls
+          {{- if .Values.certManager.enabled }}
+          {{- range untilStep 0 (int .Values.replicaCount) 1 }}
+          - name: {{ include "apache-nifi.fullname" $ }}-cert-{{ . }}
+            mountPath: /opt/nifi/nifi-current/tls/cert-{{ . }}
             readOnly: true
-{{- /* if .Values.certManager.enabled */}}{{ end }}
+          {{- end }}
+          {{- end }}
           {{- if .Values.extraVolumeMounts }}
 {{ toYaml .Values.extraVolumeMounts | indent 10 }}
           {{- end }}
@@ -551,137 +541,6 @@ spec:
           {{- else }}
           name: "logs"
           {{- end }}
-{{- if .Values.certManager.enabled }}
-      - name: cert-manager
-        imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
-        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
-        command:
-        - bash
-        - -ce
-        - |
-          trap "exit 0" TERM
-
-          NODENAME=$(hostname)
-          mkdir -p "${NIFI_HOME}"/tls/cert-manager
-
-          # Note opportunity here to inject additional trusted certs named ca.crt in other
-          # subdirectories of /opt/nifi/nifi-current/tls/, using custom secrets and/or configmaps.
-          # If any of those trusted certs expire then you will need to restart the pod to pick
-          # them up, as the truststore is only created at pod startup and Kubernetes won't
-          # update secrets mounted as subPaths anyway.
-          # c.f. https://kubernetes.io/docs/concepts/storage/volumes/#secret
-
-          function pullNodeSecretData() {
-            rm -f /tmp/secret.json /tmp/secret-data.json
-            curl --cacert /run/secrets/kubernetes.io/secret-reader-token/ca.crt \
-                 -H "Authorization: Bearer $(cat /run/secrets/kubernetes.io/secret-reader-token/token)" \
-                 https://kubernetes.default.svc/api/v1/namespaces/$(cat /run/secrets/kubernetes.io/secret-reader-token/namespace)/secrets/$(hostname) \
-                 --output /tmp/secret.json
-            jq .data < /tmp/secret.json > /tmp/secret-data.json
-            rm -f /tmp/secret.json
-          }
-
-          pullNodeSecretData
-          jq -r '."ca.crt"' < /tmp/secret-data.json | base64 -d > "${NIFI_HOME}"/tls/cert-manager/ca.crt
-          touch /tmp/tls.crt.old
-
-          rm -f "${NIFI_HOME}/tls/truststore-new.jks"
-          for ca in "${NIFI_HOME}"/tls/*/ca.crt
-          do
-            ALIAS=$(echo $ca | awk -F "/" '{print $(NF-1) }' -)
-            keytool -import \
-                    -noprompt \
-                    -trustcacerts \
-                    -alias $ALIAS \
-                    -storetype JKS \
-                    -file $ca \
-                    -keystore "${NIFI_HOME}/tls/truststore-new.jks" \
-                    -storepass "{{ .Values.certManager.truststorePasswd }}"
-          done
-          keytool -list -keystore "${NIFI_HOME}/tls/truststore-new.jks" \
-                        -storepass "{{ .Values.certManager.truststorePasswd }}"
-          mv "${NIFI_HOME}/tls/truststore-new.jks" "${NIFI_HOME}/tls/truststore.jks"
-
-          while :
-          do
-            pullNodeSecretData
-            jq -r '."tls.crt"' < /tmp/secret-data.json | base64 -d > /tmp/tls.crt
-            jq -r '."tls.key"' < /tmp/secret-data.json | base64 -d > /tmp/tls.key
-            if ! diff /tmp/tls.crt.old /tmp/tls.crt > /dev/null
-            then
-              openssl pkcs12 -export -in      "/tmp/tls.crt" \
-                                     -inkey   "/tmp/tls.key" \
-                                     -name    "${NODENAME}" \
-                                     -out     "/tmp/tls.p12" \
-                                     -passout "pass:{{ .Values.certManager.keystorePasswd }}"
-              rm -f "${NIFI_HOME}/tls/keystore-new.jks"
-              keytool -importkeystore \
-                      -noprompt \
-                      -destkeystore "${NIFI_HOME}/tls/keystore-new.jks" \
-                      -srckeystore "/tmp/tls.p12" \
-                      -srcstoretype PKCS12 \
-                      -deststoretype JKS \
-                      -srcstorepass "{{ .Values.certManager.keystorePasswd }}" \
-                      -deststorepass "{{ .Values.certManager.keystorePasswd }}"
-              mv  "${NIFI_HOME}/tls/keystore-new.jks" "${NIFI_HOME}/tls/keystore.jks"
-              mv /tmp/tls.crt /tmp/tls.crt.old
-            fi
-
-            ls -l "${NIFI_HOME}/tls/keystore.jks"
-            keytool -list -keystore "${NIFI_HOME}/tls/keystore.jks" \
-                          -storepass "{{ .Values.certManager.keystorePasswd }}"
-
-            echo Starting to sleep for {{ .Values.certManager.refreshSeconds }} seconds at $(date)
-            sleep {{ .Values.certManager.refreshSeconds }}
-          done
-        volumeMounts:
-          - name: "tls"
-            mountPath: /opt/nifi/nifi-current/tls
-          - name: secret-reader-token
-            mountPath: /run/secrets/kubernetes.io/secret-reader-token
-          {{- range $secret := .Values.secrets }}
-            {{- if $secret.mountPath }}
-              {{- if $secret.keys }}
-                {{- range $key := $secret.keys }}
-          - name: {{ include "apache-nifi.fullname" $ }}-{{ $secret.name }}
-            mountPath: {{ $secret.mountPath }}/{{ $key }}
-            subPath: {{ $key }}
-            readOnly: true
-                {{- end }}
-              {{- else }}
-          - name: {{ include "apache-nifi.fullname" $ }}-{{ $secret.name }}
-            mountPath: {{ $secret.mountPath }}
-            readOnly: true
-              {{- end }}
-            {{- end }}
-          {{- end }}
-          {{ range $secret := .Values.certManager.caSecrets }}
-          - name: {{ include "apache-nifi.fullname" $ }}-{{ $secret }}
-            mountPath: /opt/nifi/nifi-current/tls/{{ $secret }}
-            readOnly: true
-          {{ end }}
-          {{- range $configmap := .Values.configmaps }}
-            {{- if $configmap.mountPath }}
-              {{- if $configmap.keys }}
-                {{- range $key := $configmap.keys }}
-          - name: {{ include "apache-nifi.fullname" $ }}-{{ $configmap.name }}
-            mountPath: {{ $configmap.mountPath }}/{{ $key }}
-            subPath: {{ $key }}
-            readOnly: true
-                {{- end }}
-              {{- else }}
-          - name: {{ include "apache-nifi.fullname" $ }}-{{ $configmap.name }}
-            mountPath: {{ $configmap.mountPath }}
-            readOnly: true
-              {{- end }}
-            {{- end }}
-          {{- end }}
-          {{- if .Values.extraVolumeMounts }}
-{{ toYaml .Values.extraVolumeMounts | indent 10 }}
-          {{/* if .Values.extraVolumeMounts */}}{{ end }}
-        resources:
-{{ toYaml .Values.certManager.resources | indent 10 }}
-{{- /* if .Values.certManager.enabled */}}{{ end }}
       volumes:
       - name: "bootstrap-conf"
         configMap:
@@ -738,15 +597,10 @@ spec:
             - key: "flow.json"
               path: "flow.json"
 {{- if .Values.certManager.enabled }}
-      - name: secret-reader-token
+      {{- range untilStep 0 (int .Values.replicaCount) 1 }}
+      - name: {{ include "apache-nifi.fullname" $ }}-cert-{{ . }}
         secret:
-          secretName: {{ template "apache-nifi.fullname" $ }}-secret-reader-token
-      - name: tls
-        emptyDir: {}
-      {{- range .Values.certManager.caSecrets }}
-      - name: {{ include "apache-nifi.fullname" $ }}-{{ . }}
-        secret:
-          secretName: {{ . }}
+          secretName: {{ include "apache-nifi.fullname" $ }}-cert-{{ . }}
       {{- end }}
 {{- /* if .Values.certManager.enabled */}}{{ end }}
       {{- range .Values.secrets }}

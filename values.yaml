@@ -403,35 +403,13 @@ openshift:
     #host: www.test.com
     #path: /nifi
 
-# ca server details
-# Setting this true would create a nifi-toolkit based ca server
-# The ca server will be used to generate self-signed certificates required setting up secured cluster
-ca:
-  ## If true, enable the nifi-toolkit certificate authority
-  enabled: false
-  persistence:
-    enabled: true
-  server: ""
-  service:
-    port: 9090
-  token: sixteenCharacters
-  admin:
-    cn: admin
-  serviceAccount:
-    create: false
-    #name: nifi-ca
-  openshift:
-    scc:
-      enabled: false
-
 # cert-manager support
 # Setting this true will have cert-manager create a private CA for the cluster
 # as well as the certificates for each cluster node.
 certManager:
   enabled: false
+
   clusterDomain: cluster.local
-  keystorePasswd: changeMe
-  truststorePasswd: changeMe
   replaceDefaultTrustStore: false
   additionalDnsNames:
     - localhost
@@ -451,8 +429,17 @@ certManager:
   # pods to pick up the new version of the CA certificate.  So default the CA
   # lifetime to 10 years to avoid that happening very often.
   # c.f. https://github.com/cert-manager/cert-manager/issues/2478#issuecomment-1095545529
-  certDuration: 2160h
-  caDuration: 87660h
+  certDuration: 87660h # 10 years
+  certRenewBefore: 720h # 30 days
+
+  caDuration: 87660h # 10 years
+  caRenewBefore: 720h # 30 days
+
+  # You need to provide (manually) a secret that contains the password that will be used by cert-manager
+  # to create JKS truststores and keystores.
+  jks:
+    secretName: nifi-password-for-jks
+    secretKey: STORE_PASSWORD
 
 # ------------------------------------------------------------------------------
 # Zookeeper:
