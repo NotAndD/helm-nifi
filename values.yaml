@@ -10,7 +10,7 @@ replicaCount: 1
 ##
 image:
   repository: apache/nifi
-  tag: "2.4.0"
+  tag: "2.5.0"
   pullPolicy: "IfNotPresent"
   ## Optionally specify an imagePullSecret.
   ## Secret must be manually created in the namespace.
@@ -471,7 +471,7 @@ registry:
 
   image:
     repository: apache/nifi-registry
-    tag: "2.4.0"
+    tag: "2.5.0"
     pullPolicy: "IfNotPresent"
   ## Add values for the nifi-registry here
   ## ref: https://github.com/dysnix/charts/blob/main/dysnix/nifi-registry/values.yaml

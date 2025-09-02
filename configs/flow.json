@@ -14,7 +14,7 @@
             "bundle": {
                 "group": "org.apache.nifi",
                 "artifact": "nifi-flow-registry-client-nar",
-                "version": "2.4.0"
+                "version": "2.5.0"
             },
             "properties": {
                 "url": {{ include "registry.url" . | quote }}
