@@ -1,4 +1,4 @@
-{{- if .Values.metrics.prometheus.serviceMonitor.enabled }}
+{{- if .Values.metrics.prometheus.enabled }}
 ---
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
@@ -17,23 +17,25 @@ metadata:
 {{- end }}
 spec:
   endpoints:
-  - port: metrics
-    honorLabels: true
-{{- if .Values.metrics.prometheus.serviceMonitor.interval }}
-    interval: {{ .Values.metrics.prometheus.serviceMonitor.interval }}
-{{- end }}
-{{- if .Values.metrics.prometheus.serviceMonitor.metricRelabelings }}
-    metricRelabelings:
-{{ tpl (toYaml .Values.metrics.prometheus.serviceMonitor.metricRelabelings | indent 6) . }}
-{{- end }}
-{{- if .Values.metrics.prometheus.serviceMonitor.relabelings }}
-    relabelings:
-{{ toYaml .Values.metrics.prometheus.serviceMonitor.relabelings | indent 6 }}
-{{- end }}
+  {{- if eq (include "apache-nifi.isInternalSecure" .) "false" }}
+  - port: http
+    scheme: http
+  {{- else }}
+  - port: https
+    scheme: https
+  {{- end }}
+    path: /nifi-api/flow/metrics/prometheus
+  {{- with .Values.metrics.prometheus.serviceMonitor.endpointContent }}
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.metrics.prometheus.serviceMonitor.content }}
+    {{- toYaml . | nindent 2 }}
+  {{- end }}
   selector:
     matchLabels:
       app: {{ template "apache-nifi.name" . }}
       release: {{ .Release.Name }}
+      metrics: "prometheus"
   namespaceSelector:
     matchNames:
     - {{ .Release.Namespace | quote }}

@@ -12,6 +12,7 @@ metadata:
     service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
 spec:
   clusterIP: None
+  publishNotReadyAddresses: true
   ports:
   {{- if eq (include "apache-nifi.isInternalSecure" .) "false" }}
   - port: {{ .Values.properties.httpPort }}
@@ -37,6 +38,9 @@ metadata:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
     release: {{ .Release.Name | quote }}
     heritage: {{ .Release.Service | quote }}
+    {{- if .Values.metrics.prometheus.enabled }}
+    metrics: "prometheus"
+    {{- end }}
 {{- if .Values.service.annotations }}
   annotations:
 {{ toYaml .Values.service.annotations | indent 4 }}
@@ -94,25 +98,3 @@ spec:
   selector:
     app: {{ template "apache-nifi.name" . }}
     release: {{ .Release.Name }}
-{{- if .Values.metrics.prometheus.enabled }}
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: {{ template "apache-nifi.fullname" . }}-metrics
-  labels:
-    app: {{ include "apache-nifi.name" . | quote }}
-    chart: "{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}"
-    release: {{ .Release.Name | quote }}
-    heritage: {{ .Release.Service | quote }}
-spec:
-  ports:
-  - name: metrics
-    port: {{ .Values.metrics.prometheus.port }}
-    protocol: TCP
-    targetPort: metrics
-  selector:
-    app: {{ template "apache-nifi.name" . }}
-    release: {{ .Release.Name }}
-  type: ClusterIP
-  {{- end }}    
